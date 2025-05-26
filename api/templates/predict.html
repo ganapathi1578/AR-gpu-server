@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Action Recognition App</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+      color: #38bdf8;
+    }
+
+    video {
+      width: 80%;
+      max-width: 600px;
+      border: 4px solid #38bdf8;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 20px;
+    }
+
+    button {
+      background-color: #38bdf8;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      color: #0f172a;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #0ea5e9;
+    }
+
+    #result {
+      margin-top: 30px;
+      font-size: 20px;
+      color: #a5f3fc;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Action Recognition</h1>
+  <video id="preview" autoplay muted playsinline></video>
+
+  <div class="controls">
+    <button id="startBtn">Start Recording</button>
+    <button id="stopBtn" disabled>Stop & Predict</button>
+  </div>
+
+  <div id="result">Status: Waiting for recording...</div>
+
+  <script>
+    const video = document.getElementById('preview');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resultDiv = document.getElementById('result');
+
+    let mediaRecorder;
+    let recordedBlobs = [];
+
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        video.srcObject = stream;
+
+        mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'video/webm;codecs=vp8,opus'
+        });
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) recordedBlobs.push(event.data);
+        };
+
+        mediaRecorder.onstop = sendVideo;
+      } catch (err) {
+        resultDiv.textContent = 'Error accessing camera: ' + err.message;
+      }
+    }
+
+    function startRecording() {
+      recordedBlobs = [];
+      mediaRecorder.start();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      resultDiv.textContent = 'Status: Recording...';
+    }
+
+    function stopRecording() {
+      mediaRecorder.stop();
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      resultDiv.textContent = 'Status: Uploading and predicting...';
+    }
+
+    async function sendVideo() {
+      const blob = new Blob(recordedBlobs, { type: 'video/webm' });
+      const formData = new FormData();
+      formData.append('video', blob, 'action_video.webm');
+
+      try {
+        const response = await fetch('/predict/', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (response.ok) {
+          const json = await response.json();
+          resultDiv.textContent = 'Predicted Action: ' + json.result;
+        } else {
+          resultDiv.textContent = 'Prediction failed. Server error.';
+        }
+      } catch (err) {
+        resultDiv.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    startBtn.onclick = startRecording;
+    stopBtn.onclick = stopRecording;
+
+    initCamera();
+  </script>
+
+</body>
+</html>
